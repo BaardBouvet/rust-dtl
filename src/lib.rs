@@ -120,8 +120,8 @@ fn eval_rule<'a>(
         }
     }
 
-    // Push main result only if it wasn't filtered out or replaced
-    if results.is_empty() && !filter_invoked {
+    // Push main result only if it wasn't filtered out
+    if !filter_invoked {
         results.push(Value::Object(result));
     }
 
@@ -511,7 +511,8 @@ mod tests {
         let source = json!({});
         let rule = serde_json::from_str::<Vec<Value>>(r#"
             [
-              ["create", {"foo": "bar"}]
+              ["create", {"foo": "bar"}],
+              ["filter"]
             ]
         "#).unwrap();
         let result = eval_rule(&source, &rule, &HashMap::new());
@@ -547,9 +548,10 @@ mod tests {
         });
         let rule = serde_json::from_str::<Vec<Value>>(r#"
             [
-              ["create", 
+              ["create",
                 ["apply", "foo", "_S.foo"]
-              ]
+              ],
+              ["filter"]
             ]
         "#).unwrap();
         let foo_rule = serde_json::from_str::<Vec<Value>>(r#"
@@ -570,6 +572,43 @@ mod tests {
         assert_eq!(expected1, arr[0]);
         assert_eq!(expected2, arr[1]);
         assert_eq!(2, arr.len());
+    }
+
+    #[test]
+    fn test_create_apply_no_filter() {
+        let source = json!({
+            "foo": ["bar", "baz"],
+        });
+        let rule = serde_json::from_str::<Vec<Value>>(r#"
+            [
+              ["copy", "*"],
+              ["create",
+                ["apply", "foo", "_S.foo"]
+              ]
+            ]
+        "#).unwrap();
+        let foo_rule = serde_json::from_str::<Vec<Value>>(r#"
+            [
+              ["add", "bar", "_S."]
+            ]
+        "#).unwrap();
+        let mut rules = HashMap::new();
+        rules.insert("foo".to_string(), foo_rule);
+        let result = eval_rule(&source, &rule, &rules);
+        let expected1: Value = json!(
+            {"bar": "bar"}
+        );
+        let expected2: Value = json!(
+            {"bar": "baz"}
+        );
+        let expected3: Value = json!(
+            {"foo": ["bar", "baz"]}
+        );
+        let arr = result;
+        assert_eq!(expected1, arr[0]);
+        assert_eq!(expected2, arr[1]);
+        assert_eq!(expected3, arr[2]);
+        assert_eq!(3, arr.len());
     }
 
 }
