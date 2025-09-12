@@ -1,0 +1,9 @@
+[package]
+name = "dtl"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+pretty_assertions = "1.4.1"
+regex = "1.11.2"
+serde_json = "1.0.143"
