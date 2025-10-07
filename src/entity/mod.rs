@@ -1,16 +1,26 @@
-use std::{collections::HashMap, str::FromStr};
+use std::collections::HashMap;
 
-use bigdecimal::BigDecimal;
 use serde::{
     de::{MapAccess, SeqAccess, Visitor},
-    Deserialize, Serialize,
+    Deserialize, Serialize, Serializer,
 };
 use serde_json::Number;
 
-use crate::entity::{bytes::ByteWrapper, datetime::{Date, DateTimeWrapper}};
+use crate::entity::{
+    bytes::ByteWrapper,
+    datetime::{Date, DateTimeWrapper},
+    decimal::BigDecimalWrapper,
+    ni::NI,
+    uri::URI,
+    uuid::UUID,
+};
 
-mod datetime;
 mod bytes;
+mod datetime;
+mod decimal;
+mod ni;
+mod uri;
+mod uuid;
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 struct Entity {
@@ -22,67 +32,14 @@ struct Entity {
     content: HashMap<String, EntityValue>,
 }
 
-#[derive(Debug, PartialEq)]
-struct Uri(String);
-
-impl Serialize for Uri {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_str(&format!("~r{}", self.0))
-    }
-}
-
-
-
-#[derive(Debug, PartialEq)]
-struct NI{
-    namespace: String,
-    identifier: String,
-}
-
-impl Serialize for NI {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_str(&format!("~:{}:{}", self.namespace, self.identifier))
-    }
-}
-
-#[derive(Debug, PartialEq)]
-struct BigDecimalWrapper(BigDecimal);
-
-impl Serialize for BigDecimalWrapper {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_str(&format!("~f{}", self.0.to_plain_string()))
-    }
-}
-
-#[derive(Debug, PartialEq)]
-struct UUID(String);
-
-impl Serialize for UUID {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_str(&format!("~u{}", self.0))
-    }
-}
-
-#[derive(Debug, PartialEq)]
-enum EntityValue {
+#[derive(Debug, PartialEq, Clone)]
+pub enum EntityValue {
     Null,
     Bool(bool),
     // not sure how we can use bigint with serde
     Number(Number),
     String(String),
-    Uri(Uri),
+    URI(URI),
     Date(Date),
     DateTime(DateTimeWrapper),
     UUID(UUID),
@@ -103,7 +60,7 @@ impl Serialize for EntityValue {
             EntityValue::Bool(b) => serializer.serialize_bool(*b),
             EntityValue::Number(number) => number.serialize(serializer),
             EntityValue::String(s) => serializer.serialize_str(s),
-            EntityValue::Uri(u) => u.serialize(serializer),
+            EntityValue::URI(u) => u.serialize(serializer),
             EntityValue::Array(v) => v.serialize(serializer),
             EntityValue::Object(m) => m.serialize(serializer),
             EntityValue::Date(d) => d.serialize(serializer),
@@ -176,28 +133,20 @@ impl<'de> Deserialize<'de> for EntityValue {
 
             #[inline]
             fn visit_string<E>(self, value: String) -> Result<EntityValue, E> {
-                if value.starts_with("~r") {
-                    Ok(EntityValue::Uri(Uri(value[2..].to_owned())))
-                } else if value.starts_with("~t") {
-                    if value.contains("T") {
-                        Ok(EntityValue::DateTime(DateTimeWrapper::deserialize(&value[2..])))
-                    } else {
-                        Ok(EntityValue::Date(Date::deserialize(&value[2..])))
-                    }
-                } else if value.starts_with("~b") {
-                    Ok(EntityValue::Bytes(ByteWrapper::deserialize(&value[2..])))
-                } else if value.starts_with("~:") {
-                    let rest = &value[2..];
-                    if let Some(last_colon_index) = rest.rfind(':') {
-                        Ok(EntityValue::NI(NI{namespace: rest[0..last_colon_index].to_owned(), identifier: rest[last_colon_index + 1..].to_owned()}))
-                    } else {
-                        // TODO how to return sensible error
-                        todo!()
-                    }
-                } else if value.starts_with("~f") {
-                    Ok(EntityValue::Decimal(BigDecimalWrapper(BigDecimal::from_str(&value[2..]).unwrap())))
-                } else if value.starts_with("~u") {
-                    Ok(EntityValue::UUID(UUID(value[2..].to_owned())))
+                if URI::can_deserialize(&value) {
+                    Ok(EntityValue::URI(URI::deserialize(&value)))
+                } else if DateTimeWrapper::can_deserialize(&value) {
+                    Ok(EntityValue::DateTime(DateTimeWrapper::deserialize(&value)))
+                } else if Date::can_deserialize(&value) {
+                    Ok(EntityValue::Date(Date::deserialize(&value)))
+                } else if ByteWrapper::can_deserialize(&value) {
+                    Ok(EntityValue::Bytes(ByteWrapper::deserialize(&value)))
+                } else if NI::can_deserialize(&value) {
+                    Ok(EntityValue::NI(NI::deserialize(&value)))
+                } else if BigDecimalWrapper::can_deserialize(&value) {
+                    Ok(EntityValue::Decimal(BigDecimalWrapper::deserialize(&value)))
+                } else if UUID::can_deserialize(&value) {
+                    Ok(EntityValue::UUID(UUID::deserialize(&value)))
                 } else {
                     Ok(EntityValue::String(value))
                 }
@@ -254,14 +203,12 @@ impl<'de> Deserialize<'de> for EntityValue {
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
-
     use super::*;
     use pretty_assertions::assert_eq;
 
     #[test]
     fn uuid() {
-        let entity = EntityValue::UUID(UUID("123".to_owned()));
+        let entity = EntityValue::UUID(UUID::parse("123"));
         let serialized = serde_json::to_string(&entity).unwrap();
         assert_eq!(serialized, "\"~u123\"");
         let deserialized: EntityValue = serde_json::from_str(&serialized).unwrap();
@@ -269,7 +216,7 @@ mod tests {
     }
     #[test]
     fn decimal() {
-        let entity = EntityValue::Decimal(BigDecimalWrapper(BigDecimal::from_str("123.456").unwrap()));
+        let entity = EntityValue::Decimal(BigDecimalWrapper::parse("123.456"));
         let serialized = serde_json::to_string(&entity).unwrap();
         assert_eq!(serialized, "\"~f123.456\"");
         let deserialized: EntityValue = serde_json::from_str(&serialized).unwrap();
@@ -278,7 +225,7 @@ mod tests {
 
     #[test]
     fn ni() {
-        let entity = EntityValue::NI(NI{namespace: "foo".to_owned(), identifier: "bar".to_owned()});
+        let entity = EntityValue::NI(NI::new("foo", "bar"));
         let serialized = serde_json::to_string(&entity).unwrap();
         assert_eq!(serialized, "\"~:foo:bar\"");
         let deserialized: EntityValue = serde_json::from_str(&serialized).unwrap();
@@ -296,7 +243,7 @@ mod tests {
 
     #[test]
     fn date() {
-        let entity = EntityValue::Date(Date::deserialize("2020-01-01"));
+        let entity = EntityValue::Date(Date::parse("2020-01-01"));
         let serialized = serde_json::to_string(&entity).unwrap();
         assert_eq!(serialized, "\"~t2020-01-01\"");
         let deserialized: EntityValue = serde_json::from_str(&serialized).unwrap();
@@ -305,7 +252,7 @@ mod tests {
 
     #[test]
     fn datetime() {
-        let entity = EntityValue::DateTime(DateTimeWrapper::deserialize("2014-07-08T09:10:11.0+0000"));
+        let entity = EntityValue::DateTime(DateTimeWrapper::parse("2014-07-08T09:10:11.0+0000"));
         let serialized = serde_json::to_string(&entity).unwrap();
         assert_eq!(serialized, "\"~t2014-07-08T09:10:11.000000000+0000\"");
         let deserialized: EntityValue = serde_json::from_str(&serialized).unwrap();
@@ -319,7 +266,10 @@ mod tests {
             filtered: false,
             content: HashMap::from([
                 ("string".to_owned(), EntityValue::String("value".to_owned())),
-                ("uri".to_owned(), EntityValue::Uri(Uri("db.no".to_owned()))),
+                (
+                    "uri".to_owned(),
+                    EntityValue::URI(URI::deserialize("db.no")),
+                ),
                 (
                     "float".to_owned(),
                     EntityValue::Number(Number::from_f64(1.0).unwrap()),
@@ -339,7 +289,7 @@ mod tests {
                     "object_with_uri".to_owned(),
                     EntityValue::Object(HashMap::from([(
                         "uri".to_owned(),
-                        EntityValue::Uri(Uri("vg.no".to_owned())),
+                        EntityValue::URI(URI::deserialize("vg.no")),
                     )])),
                 ),
             ]),
