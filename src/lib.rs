@@ -3,8 +3,6 @@ use crate::{dtl::*, entity::EntityValue};
 mod dtl;
 mod entity;
 
-// TODO think about extension types, datetime, etc, should we make a separate DtlValue enum?
-
 /*
 
            [
