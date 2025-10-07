@@ -1,13 +1,16 @@
 use std::{collections::HashMap, str::FromStr};
 
-use base64::{engine::general_purpose, Engine as _};
 use bigdecimal::BigDecimal;
-use chrono::{DateTime, NaiveDate, Utc};
 use serde::{
     de::{MapAccess, SeqAccess, Visitor},
     Deserialize, Serialize,
 };
 use serde_json::Number;
+
+use crate::entity::{bytes::ByteWrapper, datetime::{Date, DateTimeWrapper}};
+
+mod datetime;
+mod bytes;
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 struct Entity {
@@ -31,47 +34,7 @@ impl Serialize for Uri {
     }
 }
 
-#[derive(Debug, PartialEq)]
-struct Date(NaiveDate);
 
-const DATE_FMT: &str = "%Y-%m-%d";
-
-impl Serialize for Date {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_str(&format!("~t{}", self.0.format(DATE_FMT)))
-    }
-}
-
-// TODO consider using a long to store the nanos since epoch
-#[derive(Debug, PartialEq)]
-struct DateTimeWrapper(DateTime<Utc>);
-
-const DATE_TIME_FMT: &str = "%Y-%m-%dT%H:%M:%S.%f%z";
-
-impl Serialize for DateTimeWrapper {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        //TODO check if trailing zeros is a problem
-        serializer.serialize_str(&format!("~t{}", self.0.format(DATE_TIME_FMT)))
-    }
-}
-
-#[derive(Debug, PartialEq)]
-struct ByteWrapper(Vec<u8>);
-
-impl Serialize for ByteWrapper {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_str(&format!("~b{}", general_purpose::STANDARD.encode(&self.0)))
-    }
-}
 
 #[derive(Debug, PartialEq)]
 struct NI{
@@ -122,7 +85,6 @@ enum EntityValue {
     Uri(Uri),
     Date(Date),
     DateTime(DateTimeWrapper),
-    // TODO uuid
     UUID(UUID),
     Bytes(ByteWrapper),
     NI(NI),
@@ -218,16 +180,12 @@ impl<'de> Deserialize<'de> for EntityValue {
                     Ok(EntityValue::Uri(Uri(value[2..].to_owned())))
                 } else if value.starts_with("~t") {
                     if value.contains("T") {
-                        Ok(EntityValue::DateTime(DateTimeWrapper(
-                            DateTime::parse_from_str(&value[2..], DATE_TIME_FMT).unwrap().to_utc(),
-                        )))
+                        Ok(EntityValue::DateTime(DateTimeWrapper::deserialize(&value[2..])))
                     } else {
-                        Ok(EntityValue::Date(Date(
-                            NaiveDate::parse_from_str(&value[2..], DATE_FMT).unwrap(),
-                        )))
+                        Ok(EntityValue::Date(Date::deserialize(&value[2..])))
                     }
                 } else if value.starts_with("~b") {
-                    Ok(EntityValue::Bytes(ByteWrapper(general_purpose::STANDARD.decode(&value[2..]).unwrap())))
+                    Ok(EntityValue::Bytes(ByteWrapper::deserialize(&value[2..])))
                 } else if value.starts_with("~:") {
                     let rest = &value[2..];
                     if let Some(last_colon_index) = rest.rfind(':') {
@@ -299,7 +257,6 @@ mod tests {
     use std::str::FromStr;
 
     use super::*;
-    use chrono::TimeZone;
     use pretty_assertions::assert_eq;
 
     #[test]
@@ -330,7 +287,7 @@ mod tests {
 
     #[test]
     fn bytes() {
-        let entity = EntityValue::Bytes(ByteWrapper(vec![255]));
+        let entity = EntityValue::Bytes(ByteWrapper::from_vec(vec![255]));
         let serialized = serde_json::to_string(&entity).unwrap();
         assert_eq!(serialized, "\"~b/w==\"");
         let deserialized: EntityValue = serde_json::from_str(&serialized).unwrap();
@@ -339,7 +296,7 @@ mod tests {
 
     #[test]
     fn date() {
-        let entity = EntityValue::Date(Date(NaiveDate::from_str("2020-01-01").unwrap()));
+        let entity = EntityValue::Date(Date::deserialize("2020-01-01"));
         let serialized = serde_json::to_string(&entity).unwrap();
         assert_eq!(serialized, "\"~t2020-01-01\"");
         let deserialized: EntityValue = serde_json::from_str(&serialized).unwrap();
@@ -348,7 +305,7 @@ mod tests {
 
     #[test]
     fn datetime() {
-        let entity = EntityValue::DateTime(DateTimeWrapper(Utc.with_ymd_and_hms(2014, 7, 8, 9, 10, 11).unwrap()));
+        let entity = EntityValue::DateTime(DateTimeWrapper::deserialize("2014-07-08T09:10:11.0+0000"));
         let serialized = serde_json::to_string(&entity).unwrap();
         assert_eq!(serialized, "\"~t2014-07-08T09:10:11.000000000+0000\"");
         let deserialized: EntityValue = serde_json::from_str(&serialized).unwrap();
