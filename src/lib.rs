@@ -1,6 +1,4 @@
-use serde_json::Value;
-
-use crate::dtl::{*};
+use crate::{dtl::*, entity::EntityValue};
 
 mod dtl;
 mod entity;
@@ -29,7 +27,7 @@ mod entity;
 
 */
 
-fn hello_world2(source: &Value) -> Vec<Value> {
+fn hello_world2(source: &EntityValue) -> Vec<EntityValue> {
     let mut target = Target::new();
     target.add(
         "hello",
@@ -64,8 +62,8 @@ fn hello_world2(source: &Value) -> Vec<Value> {
            ]
 */
 
-fn create_foo2(source: &Value) -> Vec<Value> {
-    let foo = |source: &Value| {
+fn create_foo2(source: &EntityValue) -> Vec<EntityValue> {
+    let foo = |source: &EntityValue| {
         let mut target = Target::new();
         target.add("bar", source.clone());
         target.output()
@@ -86,16 +84,16 @@ fn create_foo2(source: &Value) -> Vec<Value> {
               ]
             ]
 */
-fn map_upper2(_: &Value) -> Vec<Value> {
+fn map_upper2(_: &EntityValue) -> Vec<EntityValue> {
     let mut target = Target::new();
     target.add(
         "bar",
         map(
             |s| upper(s),
-            &Value::Array(vec![
-                Value::String("a".into()),
-                Value::String("B".into()),
-                Value::String("c".into()),
+            &EntityValue::Array(vec![
+                EntityValue::String("a".into()),
+                EntityValue::String("B".into()),
+                EntityValue::String("c".into()),
             ]),
         ),
     );
@@ -106,33 +104,32 @@ fn map_upper2(_: &Value) -> Vec<Value> {
 mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
-    use serde_json::json; // optional, nicer diffs
 
     #[test]
     fn test_hello_world2() {
-        let source = json!({
+        let source = json(r#"{
             "x": { "y": "D" }
-        });
+        }"#);
         let result = hello_world2(&source);
-        let expected = json!({
+        let expected = json(r#"{
             "hello": "world"
-        });
+        }"#);
         assert_eq!(1, result.len());
         assert_eq!(expected, result[0]);
     }
 
     #[test]
     fn test_create_foo2() {
-        let source = json!({
-            "foo": ["bar", "baz"],
-        });
+        let source = json(r#"{
+            "foo": ["bar", "baz"]
+        }"#);
         let result = create_foo2(&source);
-        let expected1: Value = json!(
+        let expected1: EntityValue = json(r#"
             {"bar": "bar"}
-        );
-        let expected2: Value = json!(
+        "#);
+        let expected2: EntityValue = json(r#"
             {"bar": "baz"}
-        );
+        "#);
         assert_eq!(2, result.len());
         assert_eq!(expected1, result[0]);
         assert_eq!(expected2, result[1]);
@@ -140,11 +137,11 @@ mod tests {
 
     #[test]
     fn test_map_upper2() {
-        let source = json!({});
+        let source = json(r#"{}"#);
         let result = map_upper2(&source);
-        let expected1: Value = json!(
+        let expected1: EntityValue = json(r#"
             {"bar": ["A", "B", "C"]}
-        );
+        "#);
         assert_eq!(1, result.len());
         assert_eq!(expected1, result[0]);
     }
