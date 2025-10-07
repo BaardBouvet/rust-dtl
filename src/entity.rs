@@ -1,7 +1,9 @@
-use core::fmt;
 use std::collections::HashMap;
 
-use serde::{de::{self, DeserializeSeed, MapAccess, SeqAccess, Visitor}, Deserialize, Serialize};
+use serde::{
+    de::{MapAccess, SeqAccess, Visitor},
+    Deserialize, Serialize,
+};
 use serde_json::Number;
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
@@ -31,9 +33,11 @@ impl Uri {
 enum EntityValue {
     Null,
     Bool(bool),
+    // TODO replace with float, integer
     Number(Number),
     String(String),
     Uri(Uri),
+    // TODO date, datetime, namespaced identifiers, bytes, uuid, decimal
     Array(Vec<EntityValue>),
     Object(HashMap<String, EntityValue>),
 }
@@ -64,49 +68,6 @@ impl Serialize for EntityValue {
     }
 }
 
-struct KeyClassifier;
-
-enum KeyClass {
-    Map(String),
-}
-
-impl<'de> DeserializeSeed<'de> for KeyClassifier {
-    type Value = KeyClass;
-
-    fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        deserializer.deserialize_str(self)
-    }
-}
-
-impl<'de> Visitor<'de> for KeyClassifier {
-    type Value = KeyClass;
-
-    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        formatter.write_str("a string key")
-    }
-
-    fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
-    where
-        E: de::Error,
-    {
-        match s {
-            _ => Ok(KeyClass::Map(s.to_owned())),
-        }
-    }
-
-    fn visit_string<E>(self, s: String) -> Result<Self::Value, E>
-    where
-        E: de::Error,
-    {
-        match s.as_str() {
-            _ => Ok(KeyClass::Map(s)),
-        }
-    }
-}
-
 impl<'de> Deserialize<'de> for EntityValue {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -125,8 +86,8 @@ impl<'de> Deserialize<'de> for EntityValue {
             fn visit_bool<E>(self, value: bool) -> Result<EntityValue, E> {
                 Ok(EntityValue::Bool(value))
             }
+            
             #[inline]
-
             fn visit_i64<E>(self, value: i64) -> Result<EntityValue, E> {
                 Ok(EntityValue::Number(value.into()))
             }
@@ -168,7 +129,9 @@ impl<'de> Deserialize<'de> for EntityValue {
             #[inline]
             fn visit_string<E>(self, value: String) -> Result<EntityValue, E> {
                 if value.starts_with("~u") {
-                    Ok(EntityValue::Uri(Uri{uri: value[2..].to_owned()}))
+                    Ok(EntityValue::Uri(Uri {
+                        uri: value[2..].to_owned(),
+                    }))
                 } else {
                     Ok(EntityValue::String(value))
                 }
@@ -210,29 +173,13 @@ impl<'de> Deserialize<'de> for EntityValue {
             where
                 V: MapAccess<'de>,
             {
-                match (visitor.next_key_seed(KeyClassifier))? {
-                    #[cfg(feature = "arbitrary_precision")]
-                    Some(KeyClass::Number) => {
-                        let number: NumberFromString = tri!(visitor.next_value());
-                        Ok(Value::Number(number.value))
-                    }
-                    #[cfg(feature = "raw_value")]
-                    Some(KeyClass::RawValue) => {
-                        let value = tri!(visitor.next_value_seed(crate::raw::BoxedFromString));
-                        crate::from_str(value.get()).map_err(de::Error::custom)
-                    }
-                    Some(KeyClass::Map(first_key)) => {
-                        let mut values = HashMap::new();
+                let mut values = HashMap::new();
 
-                        values.insert(first_key, (visitor.next_value())?);
-                        while let Some((key, value)) = (visitor.next_entry())? {
-                            values.insert(key, value);
-                        }
-
-                        Ok(EntityValue::Object(values))
-                    }
-                    None => Ok(EntityValue::Object(HashMap::new())),
+                while let Some((key, value)) = (visitor.next_entry())? {
+                    values.insert(key, value);
                 }
+
+                Ok(EntityValue::Object(values))
             }
         }
         deserializer.deserialize_any(EntityValueVisitor)
