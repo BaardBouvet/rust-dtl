@@ -3,6 +3,7 @@ use serde_json::Value;
 use crate::dtl::{*};
 
 mod dtl;
+mod entity;
 
 // TODO think about extension types, datetime, etc, should we make a separate DtlValue enum?
 

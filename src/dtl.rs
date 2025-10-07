@@ -1,4 +1,6 @@
 use serde_json::Value;
+
+#[derive(Debug)]
 pub struct Target {
     target: Value,
     filtered: bool,
@@ -149,7 +151,7 @@ pub fn path<'a>(arg: Value, value: &'a Value) -> &'a Value {
 mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
-    use serde_json::json; // optional, nicer diffs
+    use serde_json::{json}; // optional, nicer diffs
 
     #[test]
     fn test_lower() {
@@ -160,5 +162,10 @@ mod tests {
     fn test_concat() {
         assert_eq!(json!("aB"), concat(&json!(["a", "B", 1, null, []])));
         assert_eq!(json!("a"), concat(&json!("a")));
+    }
+
+    #[test]
+    fn test_non_transit() {
+        assert_eq!("http://google.com", json!("http://google.com").as_str().unwrap());
     }
 }
