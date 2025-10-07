@@ -15,6 +15,10 @@ impl ByteWrapper {
     pub(crate) fn can_deserialize(value: &str) -> bool {
         value.starts_with("~b")
     }
+    
+    pub(crate) fn from_array(arg: &[u8; 5]) -> ByteWrapper {
+        ByteWrapper(arg.to_vec())
+    }
 }
 
 impl Serialize for ByteWrapper {

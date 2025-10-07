@@ -45,6 +45,10 @@ impl DateTimeWrapper {
     }
 }
 
+// TODO should support parsing ending with 'Z' (utc)
+// TODO should support parsing with optional nanos
+// TODO should omit trailing zeros 
+// TODO should always end with 'Z' (utc)
 const DATE_TIME_FMT: &str = "%Y-%m-%dT%H:%M:%S.%f%z";
 
 impl Serialize for DateTimeWrapper {
@@ -52,7 +56,6 @@ impl Serialize for DateTimeWrapper {
     where
         S: serde::Serializer,
     {
-        //TODO check if trailing zeros is a problem
         serializer.serialize_str(&format!("~t{}", self.0.format(DATE_TIME_FMT)))
     }
 }

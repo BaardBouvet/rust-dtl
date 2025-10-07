@@ -5,11 +5,15 @@ use serde::Serialize;
 pub struct URI(String);
 impl URI {
     pub(crate) fn deserialize(value: &str) -> URI {
-        URI(value[2..].to_owned())
+        Self::parse(&value[2..])
     }
     
     pub(crate) fn can_deserialize(value: &str) -> bool {
         value.starts_with("~r")
+    }
+    
+    pub(crate) fn parse(arg: &str) -> URI {
+        URI(arg.to_owned())
     }
 }
 

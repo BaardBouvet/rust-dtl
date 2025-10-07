@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use serde::{
     de::{MapAccess, SeqAccess, Visitor},
-    Deserialize, Serialize, Serializer,
+    Deserialize, Serialize,
 };
 use serde_json::Number;
 
@@ -22,12 +22,23 @@ mod ni;
 mod uri;
 mod uuid;
 
+// TODO not sure if we need this wrapper in this library
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 struct Entity {
     #[serde(rename = "_id")]
     id: String,
+    #[serde(rename = "_deleted")]
+    deleted: bool,
+    #[serde(rename = "_ts")]
+    timestamp: u128,
     #[serde(rename = "_filtered")]
     filtered: bool,
+    #[serde(rename = "_updated")]
+    updated: u64,
+    #[serde(rename = "_hash")]
+    hash: String,
+    #[serde(rename = "_previous")]
+    previous: Option<u64>,
     #[serde(flatten)]
     content: HashMap<String, EntityValue>,
 }
@@ -133,22 +144,27 @@ impl<'de> Deserialize<'de> for EntityValue {
 
             #[inline]
             fn visit_string<E>(self, value: String) -> Result<EntityValue, E> {
-                if URI::can_deserialize(&value) {
-                    Ok(EntityValue::URI(URI::deserialize(&value)))
-                } else if DateTimeWrapper::can_deserialize(&value) {
-                    Ok(EntityValue::DateTime(DateTimeWrapper::deserialize(&value)))
-                } else if Date::can_deserialize(&value) {
-                    Ok(EntityValue::Date(Date::deserialize(&value)))
-                } else if ByteWrapper::can_deserialize(&value) {
-                    Ok(EntityValue::Bytes(ByteWrapper::deserialize(&value)))
-                } else if NI::can_deserialize(&value) {
-                    Ok(EntityValue::NI(NI::deserialize(&value)))
-                } else if BigDecimalWrapper::can_deserialize(&value) {
-                    Ok(EntityValue::Decimal(BigDecimalWrapper::deserialize(&value)))
-                } else if UUID::can_deserialize(&value) {
-                    Ok(EntityValue::UUID(UUID::deserialize(&value)))
-                } else {
+                if !value.starts_with("~") {
+                    // optimization to avoid all the checks for non-transit strings
                     Ok(EntityValue::String(value))
+                } else {
+                    if URI::can_deserialize(&value) {
+                        Ok(EntityValue::URI(URI::deserialize(&value)))
+                    } else if DateTimeWrapper::can_deserialize(&value) {
+                        Ok(EntityValue::DateTime(DateTimeWrapper::deserialize(&value)))
+                    } else if Date::can_deserialize(&value) {
+                        Ok(EntityValue::Date(Date::deserialize(&value)))
+                    } else if ByteWrapper::can_deserialize(&value) {
+                        Ok(EntityValue::Bytes(ByteWrapper::deserialize(&value)))
+                    } else if NI::can_deserialize(&value) {
+                        Ok(EntityValue::NI(NI::deserialize(&value)))
+                    } else if BigDecimalWrapper::can_deserialize(&value) {
+                        Ok(EntityValue::Decimal(BigDecimalWrapper::deserialize(&value)))
+                    } else if UUID::can_deserialize(&value) {
+                        Ok(EntityValue::UUID(UUID::deserialize(&value)))
+                    } else {
+                        Ok(EntityValue::String(value))
+                    }
                 }
             }
 
@@ -261,14 +277,27 @@ mod tests {
 
     #[test]
     fn main() {
+        fn current_time_in_millis() -> u128 {
+            use std::time::{SystemTime, UNIX_EPOCH};
+            let start = SystemTime::now();
+            let since_the_epoch = start
+                .duration_since(UNIX_EPOCH)
+                .expect("time should go forward");
+            since_the_epoch.as_millis()
+        }
         let entity = Entity {
             id: "1".to_owned(),
             filtered: false,
+            updated: 0,
+            hash: "a".to_owned(),
+            previous: None,
+            deleted: false,
+            timestamp: current_time_in_millis(),
             content: HashMap::from([
                 ("string".to_owned(), EntityValue::String("value".to_owned())),
                 (
                     "uri".to_owned(),
-                    EntityValue::URI(URI::deserialize("db.no")),
+                    EntityValue::URI(URI::parse("http://db.no")),
                 ),
                 (
                     "float".to_owned(),
@@ -280,6 +309,9 @@ mod tests {
                 ),
                 ("null".to_owned(), EntityValue::Null),
                 ("boolean".to_owned(), EntityValue::Bool(true)),
+                ("bytes".to_owned(), EntityValue::Bytes(ByteWrapper::from_array(b"hello"))),
+                ("ni".to_owned(), EntityValue::NI(NI::new(&"foo", &"bar"))),
+                ("uuid".to_owned(), EntityValue::UUID(UUID::parse(&"1"))),
                 ("empty_array".to_owned(), EntityValue::Array(vec![])),
                 (
                     "empty_object".to_owned(),
@@ -289,7 +321,7 @@ mod tests {
                     "object_with_uri".to_owned(),
                     EntityValue::Object(HashMap::from([(
                         "uri".to_owned(),
-                        EntityValue::URI(URI::deserialize("vg.no")),
+                        EntityValue::URI(URI::parse("http://vg.no")),
                     )])),
                 ),
             ]),
