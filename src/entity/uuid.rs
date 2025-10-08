@@ -1,3 +1,6 @@
+use core::fmt;
+use std::fmt::Display;
+
 use serde::Serialize;
 
 
@@ -14,6 +17,12 @@ impl UUID {
     
     pub(crate) fn parse(arg: &str) -> UUID {
         UUID(arg.to_owned())
+    }
+}
+
+impl Display for UUID {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "~u{}", self.0)
     }
 }
 

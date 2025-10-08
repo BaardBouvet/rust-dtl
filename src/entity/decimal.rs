@@ -1,4 +1,5 @@
-use std::str::FromStr;
+use core::fmt;
+use std::{fmt::Display, str::FromStr};
 
 use bigdecimal::BigDecimal;
 use serde::Serialize;
@@ -16,6 +17,12 @@ impl BigDecimalWrapper {
     
     pub(crate) fn parse(arg: &str) -> BigDecimalWrapper {
         BigDecimalWrapper(BigDecimal::from_str(arg).unwrap())
+    }
+}
+
+impl Display for BigDecimalWrapper {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "~f{}", self.0.to_plain_string())
     }
 }
 

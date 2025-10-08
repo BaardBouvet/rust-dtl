@@ -41,8 +41,8 @@ fn hello_world2(source: &EntityValue) -> Vec<EntityValue> {
                 )),
                 null_literal(),
             ])),
-        ]),
-    ));
+        ])),
+    );
     target.output()
 }
 
@@ -102,32 +102,35 @@ fn map_upper2(_: &EntityValue) -> Vec<EntityValue> {
 mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
+    use serde_json::json;
 
     #[test]
     fn test_hello_world2() {
-        let source = json(r#"{
+        let source = json!({
             "x": { "y": "D" }
-        }"#);
+        })
+        .into();
         let result = hello_world2(&source);
-        let expected = json(r#"{
+        let expected = json!({
             "hello": "world"
-        }"#);
+        });
         assert_eq!(1, result.len());
         assert_eq!(expected, result[0]);
     }
 
     #[test]
     fn test_create_foo2() {
-        let source = json(r#"{
+        let source = json!({
             "foo": ["bar", "baz"]
-        }"#);
+        })
+        .into();
         let result = create_foo2(&source);
-        let expected1: EntityValue = json(r#"
+        let expected1 = json!(
             {"bar": "bar"}
-        "#);
-        let expected2: EntityValue = json(r#"
+        );
+        let expected2 = json!(
             {"bar": "baz"}
-        "#);
+        );
         assert_eq!(2, result.len());
         assert_eq!(expected1, result[0]);
         assert_eq!(expected2, result[1]);
@@ -135,11 +138,11 @@ mod tests {
 
     #[test]
     fn test_map_upper2() {
-        let source = json(r#"{}"#);
+        let source = json!({}).into();
         let result = map_upper2(&source);
-        let expected1: EntityValue = json(r#"
+        let expected1 = json!(
             {"bar": ["A", "B", "C"]}
-        "#);
+        );
         assert_eq!(1, result.len());
         assert_eq!(expected1, result[0]);
     }

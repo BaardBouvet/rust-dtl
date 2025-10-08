@@ -1,10 +1,11 @@
+use core::fmt::{self, Debug};
 use std::collections::HashMap;
 
 use serde::{
     de::{MapAccess, SeqAccess, Visitor},
     Deserialize, Serialize,
 };
-use serde_json::Number;
+use serde_json::{Number, Value};
 
 use crate::entity::{
     bytes::ByteWrapper,
@@ -22,7 +23,7 @@ mod ni;
 mod uri;
 mod uuid;
 
-// TODO not sure if we need this wrapper in this library
+//TODO not sure if we need this wrapper in this library
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 struct Entity {
     #[serde(rename = "_id")]
@@ -43,7 +44,7 @@ struct Entity {
     content: HashMap<String, EntityValue>,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(PartialEq, Clone)]
 pub enum EntityValue {
     Null,
     Bool(bool),
@@ -59,6 +60,53 @@ pub enum EntityValue {
     Decimal(BigDecimalWrapper),
     Array(Vec<EntityValue>),
     Object(HashMap<String, EntityValue>),
+}
+
+impl Debug for EntityValue {
+    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            EntityValue::Null => formatter.write_str("Null"),
+            EntityValue::Bool(boolean) => write!(formatter, "Bool({})", boolean),
+            EntityValue::Number(number) => Debug::fmt(number, formatter),
+            EntityValue::String(string) => write!(formatter, "String({:?})", string),
+            EntityValue::Array(vec) => {
+                        formatter.write_str("Array ")?;
+                        Debug::fmt(vec, formatter)
+                    }
+            EntityValue::Object(map) => {
+                        formatter.write_str("Object ")?;
+                        Debug::fmt(map, formatter)
+                    }
+            EntityValue::URI(uri) => write!(formatter, "URI({})", uri),
+            EntityValue::Date(date) => write!(formatter, "Date({})", date),
+            EntityValue::DateTime(date_time_wrapper) => write!(formatter, "DateTime({})", date_time_wrapper),
+            EntityValue::UUID(uuid) => write!(formatter, "UUID({})", uuid),
+            EntityValue::Bytes(byte_wrapper) => write!(formatter, "Bytes({})", byte_wrapper),
+            EntityValue::NI(ni) => write!(formatter, "NI({})", ni),
+            EntityValue::Decimal(big_decimal_wrapper) => write!(formatter, "Decimal({})", big_decimal_wrapper),
+        }
+    }
+}
+
+// to be able to use the json!() macro for non-transit json in tests
+impl From<Value> for EntityValue {
+    fn from(value: Value) -> Self {
+        serde_json::from_str(&serde_json::to_string(&value).unwrap()).unwrap()
+    }
+}
+
+impl Into<Value> for EntityValue {
+    fn into(self) -> Value {
+        serde_json::to_value(self).unwrap()
+    }
+}
+
+impl PartialEq<EntityValue> for Value {
+    fn eq(&self, other: &EntityValue) -> bool {
+        let rhs = serde_json::to_string(self).unwrap();
+        let lhs = serde_json::to_string(&other).unwrap();
+        lhs == rhs
+    }
 }
 
 impl Serialize for EntityValue {
@@ -144,28 +192,28 @@ impl<'de> Deserialize<'de> for EntityValue {
 
             #[inline]
             fn visit_string<E>(self, value: String) -> Result<EntityValue, E> {
-                if !value.starts_with("~") {
+                Ok(if !value.starts_with("~") {
                     // optimization to avoid all the checks for non-transit strings
-                    Ok(EntityValue::String(value))
+                    EntityValue::String(value)
                 } else {
                     if URI::can_deserialize(&value) {
-                        Ok(EntityValue::URI(URI::deserialize(&value)))
+                        EntityValue::URI(URI::deserialize(&value))
                     } else if DateTimeWrapper::can_deserialize(&value) {
-                        Ok(EntityValue::DateTime(DateTimeWrapper::deserialize(&value)))
+                        EntityValue::DateTime(DateTimeWrapper::deserialize(&value))
                     } else if Date::can_deserialize(&value) {
-                        Ok(EntityValue::Date(Date::deserialize(&value)))
+                        EntityValue::Date(Date::deserialize(&value))
                     } else if ByteWrapper::can_deserialize(&value) {
-                        Ok(EntityValue::Bytes(ByteWrapper::deserialize(&value)))
+                        EntityValue::Bytes(ByteWrapper::deserialize(&value))
                     } else if NI::can_deserialize(&value) {
-                        Ok(EntityValue::NI(NI::deserialize(&value)))
+                        EntityValue::NI(NI::deserialize(&value))
                     } else if BigDecimalWrapper::can_deserialize(&value) {
-                        Ok(EntityValue::Decimal(BigDecimalWrapper::deserialize(&value)))
+                        EntityValue::Decimal(BigDecimalWrapper::deserialize(&value))
                     } else if UUID::can_deserialize(&value) {
-                        Ok(EntityValue::UUID(UUID::deserialize(&value)))
+                        EntityValue::UUID(UUID::deserialize(&value))
                     } else {
-                        Ok(EntityValue::String(value))
+                        EntityValue::String(value)
                     }
-                }
+                })
             }
 
             #[inline]

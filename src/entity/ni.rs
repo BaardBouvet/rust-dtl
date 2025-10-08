@@ -1,3 +1,6 @@
+use core::fmt;
+use std::fmt::Display;
+
 use serde::Serialize;
 
 
@@ -26,6 +29,12 @@ impl NI {
     
     pub(crate) fn new(namespace: &str, identifier: &str) -> Self {
         Self { namespace: namespace.to_owned(), identifier: identifier.to_owned() }
+    }
+}
+
+impl Display for NI {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "~:{}:{}", self.namespace, self.identifier)
     }
 }
 

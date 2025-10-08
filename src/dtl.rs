@@ -102,16 +102,23 @@ pub fn concat(parts: &EntityValue) -> EntityValue {
     }
 }
 
-pub fn apply(function: impl Fn(&EntityValue) -> Vec<EntityValue>, items: &EntityValue) -> EntityValue {
+pub fn apply(
+    function: impl Fn(&EntityValue) -> Vec<EntityValue>,
+    items: &EntityValue,
+) -> EntityValue {
     match items {
-        EntityValue::Array(arr) => EntityValue::Array(arr.iter().flat_map(|v| function(v)).collect()),
+        EntityValue::Array(arr) => {
+            EntityValue::Array(arr.iter().flat_map(|v| function(v)).collect())
+        }
         _ => EntityValue::Array(vec![]),
     }
 }
 
 pub fn map(function: impl Fn(&EntityValue) -> EntityValue, items: &EntityValue) -> EntityValue {
     match items {
-        EntityValue::Array(arr) => EntityValue::Array(arr.iter().map(|item| function(item)).collect()),
+        EntityValue::Array(arr) => {
+            EntityValue::Array(arr.iter().map(|item| function(item)).collect())
+        }
         _ => EntityValue::Null,
     }
 }
@@ -149,23 +156,48 @@ pub fn path<'a>(arg: EntityValue, value: &'a EntityValue) -> &'a EntityValue {
     }
 }
 
-pub fn json(json: &str) -> EntityValue {
-    serde_json::from_str(json).unwrap()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
+    use serde_json::json;
 
     #[test]
     fn test_lower() {
-        assert_eq!(json(r#"["a", "b"]"#), lower(&json(r#"["a", "B", 1, null, []]"#)));
+        assert_eq!(
+            json!(["a", "b"]),
+            lower(&json!(["a", "B", 1, null, []]).into())
+        );
     }
 
     #[test]
     fn test_concat() {
-        assert_eq!(json(r#""aB""#), concat(&json(r#"["a", "B", 1, null, []]"#)));
-        assert_eq!(json(r#""a""#), concat(&json(r#""a""#)));
+        assert_eq!(json!("aB"), concat(&json!(["a", "B", 1, null, []]).into()));
+        assert_eq!(json!("a"), concat(&json!("a").into()));
     }
+
+    // #[test]
+    // fn test_boolean() {
+    //     //TODO impl eval
+    //     assert_eq!(json(r#"false"#), eval(r#" ["boolean", "false"] "#));
+    //     assert_eq!(json(r#"null"#), eval(r#" ["boolean", null] "#));
+    //     assert_eq!(json(r#" [true, true, false] "#), eval(r#"
+    //         ["boolean",
+    //             ["list", "true", "~rhttp://www.example.org/",
+    //             "True", false, 1234]]
+    //     "#));
+    //     assert_eq!(json(r#" [true, false, false, false] "#), eval(r#"
+    //         ["boolean", ["boolean", false],
+    //             ["list", "true", "~rhttp://www.example.org/",
+    //             "124.4", "FALSE"]]
+    //     "#));
+    //     assert_eq!(json(r#" [true, “n/a”, “n/a”]"#), eval(r#"
+    //         ["boolean", ["string", "n/a"],
+    //             ["list", "true", "~rhttp://www.example.org/", "124.4"]]
+    //     "#));
+    //     assert_eq!(json(r#" [true, “http://www.example.org/”, false] "#), eval(r#"
+    //         ["boolean", ["string", "_."],
+    //             ["list", "true", "~rhttp://www.example.org/", "False"]]
+    //     "#));
+    // }
 }

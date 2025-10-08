@@ -1,3 +1,6 @@
+use core::fmt;
+use std::fmt::Display;
+
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::Serialize;
 
@@ -14,6 +17,12 @@ impl Date {
     
     pub(crate) fn parse(arg: &str) -> Date {
         Date(NaiveDate::parse_from_str(&arg, DATE_FMT).unwrap())
+    }
+}
+
+impl Display for Date {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "~t{}", self.0.format(DATE_FMT))
     }
 }
 
@@ -42,6 +51,12 @@ impl DateTimeWrapper {
     
     pub(crate) fn parse(arg: &str) -> DateTimeWrapper {
         DateTimeWrapper(DateTime::parse_from_str(&arg, DATE_TIME_FMT).unwrap().to_utc())
+    }
+}
+
+impl Display for DateTimeWrapper {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "~t{}", self.0.format(DATE_TIME_FMT))
     }
 }
 

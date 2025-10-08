@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use base64::{engine::general_purpose, Engine as _};
 use serde::Serialize;
 
@@ -18,6 +20,12 @@ impl ByteWrapper {
     
     pub(crate) fn from_array(arg: &[u8; 5]) -> ByteWrapper {
         ByteWrapper(arg.to_vec())
+    }
+}
+
+impl Display for ByteWrapper {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "~b{}", general_purpose::STANDARD.encode(&self.0))
     }
 }
 
